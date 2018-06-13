@@ -654,27 +654,35 @@ class Route(object):
 
 
 ###############################################################################
-# Application Object ###########################################################
+# 应用对象 ###########################################################
 ###############################################################################
 
 
 class Bottle(object):
-    """ Each Bottle object represents a single, distinct web application and
-        consists of routes, callbacks, plugins, resources and configuration.
-        Instances are callable WSGI applications.
-
-        :param catchall: If true (default), handle all exceptions. Turn off to
-                         let debugging middleware handle exceptions.
+    """每一个Bottle对象都表现为一个独立的web应用（这是整个框架的核心控制所在）
+        包含：
+            - 路由
+            - 回调
+            - 插件
+            - 资源
+            - 配置
+        实例本身是一个可调用的WSGI应用
+        参数 catchall 缺省为真，处理所有异常。调试中间件处理异常可以关闭该参数
     """
 
     @lazy_attribute
     def _global_config(cls):
+        """
+        全局配置
+        :return:
+        """
         cfg = ConfigDict()
         cfg.meta_set('catchall', 'validate', bool)
         return cfg
 
     def __init__(self, **kwargs):
         #: A :class:`ConfigDict` for app specific configuration.
+        # 配置相关
         self.config = self._global_config._make_overlay()
         self.config._add_change_listener(
             functools.partial(self.trigger_hook, 'config'))
@@ -697,16 +705,17 @@ class Bottle(object):
         self._mounts = []
 
         #: A :class:`ResourceManager` for application files
+        # 资源管理器
         self.resources = ResourceManager()
 
-        self.routes = []  # List of installed :class:`Route` instances.
-        self.router = Router()  # Maps requests to :class:`Route` instances.
+        self.routes = []  # 被添加的Route实例列表.
+        self.router = Router()  # 路由器：请求和Route实例之间的映射Maps requests to :class:`Route` instances.
         self.error_handler = {}
 
-        # Core plugins
-        self.plugins = []  # List of installed plugins.
-        self.install(JSONPlugin())
-        self.install(TemplatePlugin())
+        # 核心插件
+        self.plugins = []  # 已安装/添加的插件列表.
+        self.install(JSONPlugin())  # 安装/添加JSON插件
+        self.install(TemplatePlugin())  # 安装/添加模板插件
 
     #: If true, most exceptions are caught and returned as :exc:`HTTPError`
     catchall = DictProperty('config', 'catchall')
@@ -1186,7 +1195,7 @@ class Bottle(object):
 
 
 ###############################################################################
-# HTTP and WSGI Tools ##########################################################
+# HTTP 和 WSGI 工具 ##########################################################
 ###############################################################################
 
 
@@ -2007,15 +2016,19 @@ class HTTPError(HTTPResponse):
 
 
 ###############################################################################
-# Plugins ######################################################################
+# 插件 ######################################################################
 ###############################################################################
 
 
 class PluginError(BottleException):
+    """插件相关的异常"""
     pass
 
 
+# 插件需要实现
+# setup() 和apply()两种方法
 class JSONPlugin(object):
+    """JSON插件"""
     name = 'json'
     api = 2
 
@@ -2368,11 +2381,11 @@ _UNSET = object()
 
 
 class ConfigDict(dict):
-    """ A dict-like configuration storage with additional support for
-        namespaces, validators, meta-data, overlays and more.
+    """
+    类字典配置存储结构，可以支持额外的命名空间、验证器、元数据、覆盖层等等
+    该结构对读访问做了重度优化，所有的只读方法以及项目访问基本和内建字典速度一致
 
-        This dict-like class is heavily optimized for read access. All read-only
-        methods as well as item access should be as fast as the built-in dict.
+    TACEY：该结构可以用于实现通用的配置加载器
     """
 
     __slots__ = ('_meta', '_change_listener', '_overlays', '_virtual_keys', '_source', '__weakref__')
@@ -2388,7 +2401,7 @@ class ConfigDict(dict):
         self._virtual_keys = set()
 
     def load_module(self, path, squash=True):
-        """Load values from a Python module.
+        """从Python模块中加载对象.
 
            Example modue ``config.py``::
 
@@ -2404,48 +2417,20 @@ class ConfigDict(dict):
            >>> c.load_module("config", False)
            {'DEBUG': True, 'SQLITE': {'DB': 'memory'}}
 
-           :param squash: If true (default), dictionary values are assumed to
-                          represent namespaces (see :meth:`load_dict`).
+           :param squash: 如果真（缺省），字典值被指派到相应的命名空间 (see :meth:`load_dict`).
         """
         config_obj = load(path)
         obj = {key: getattr(config_obj, key) for key in dir(config_obj)
-               if key.isupper()}
+               if key.isupper()}  # 只加载KEY是大写的
 
-        if squash:
+        if squash:  # 以命名空间的形式加载
             self.load_dict(obj)
         else:
-            self.update(obj)
+            self.update(obj)  # 直接更新字典
         return self
 
     def load_config(self, filename, **options):
-        """ Load values from an ``*.ini`` style config file.
-
-            A configuration file consists of sections, each led by a
-            ``[section]`` header, followed by key/value entries separated by
-            either ``=`` or ``:``. Section names and keys are case-insensitive.
-            Leading and trailing whitespace is removed from keys and values.
-            Values can be omitted, in which case the key/value delimiter may
-            also be left out. Values can also span multiple lines, as long as
-            they are indented deeper than the first line of the value. Commands
-            are prefixed by ``#`` or ``;`` and may only appear on their own on
-            an otherwise empty line.
-
-            Both section and key names may contain dots (``.``) as namespace
-            separators. The actual configuration parameter name is constructed
-            by joining section name and key name together and converting to
-            lower case.
-
-            The special sections ``bottle`` and ``ROOT`` refer to the root
-            namespace and the ``DEFAULT`` section defines default values for all
-            other sections.
-
-            With Python 3, extended string interpolation is enabled.
-
-            :param filename: The path of a config file, or a list of paths.
-            :param options: All keyword parameters are passed to the underlying
-                :class:`python:configparser.ConfigParser` constructor call.
-
-        """
+        """从.ini风格的配置文件加载配置项"""
         options.setdefault('allow_no_value', True)
         if py3k:
             options.setdefault('interpolation',
@@ -2461,9 +2446,8 @@ class ConfigDict(dict):
         return self
 
     def load_dict(self, source, namespace=''):
-        """ Load values from a dictionary structure. Nesting can be used to
-            represent namespaces.
-
+        """
+        直接从字典结构对象加载配置项。嵌套字典可以用于表现命名空间
             >>> c = ConfigDict()
             >>> c.load_dict({'some': {'namespace': {'key': 'value'} } })
             {'some.namespace.key': 'value'}
@@ -2480,9 +2464,8 @@ class ConfigDict(dict):
         return self
 
     def update(self, *a, **ka):
-        """ If the first parameter is a string, all keys are prefixed with this
-            namespace. Apart from that it works just as the usual dict.update().
-
+        """如果第一个参数是一个字符串，那么所有的key都将以其为命名空间前缀。
+            除此之外，本方法和dict.update()别无二样
             >>> c = ConfigDict()
             >>> c.update('some.namespace', key='value')
         """
@@ -2494,11 +2477,13 @@ class ConfigDict(dict):
             self[prefix + key] = value
 
     def setdefault(self, key, value):
+        """设置字典缺省值"""
         if key not in self:
             self[key] = value
         return self[key]
 
     def __setitem__(self, key, value):
+        """字典k-v赋值"""
         if not isinstance(key, basestring):
             raise TypeError('Key has type %r (not a string)' % type(key))
 
@@ -2515,6 +2500,7 @@ class ConfigDict(dict):
             overlay._set_virtual(key, value)
 
     def __delitem__(self, key):
+        """删除字典中的某一个key项"""
         if key not in self:
             raise KeyError(key)
         if key in self._virtual_keys:
@@ -2616,7 +2602,7 @@ class ConfigDict(dict):
 
             Used by Route.config
         """
-        # Cleanup dead references
+        # 清除死掉的引用
         self._overlays[:] = [ref for ref in self._overlays if ref() is not None]
 
         overlay = ConfigDict()
@@ -2628,37 +2614,39 @@ class ConfigDict(dict):
         return overlay
 
 
-class AppStack(list):
-    """ A stack-like list. Calling it returns the head of the stack. """
+class AppStack(list):  # 应用栈
+    """一个类栈列表。调用它会弹出返回栈头元素"""
 
     def __call__(self):
-        """ Return the current default application. """
+        """ 返回当前缺省应用. """
         return self.default
 
     def push(self, value=None):
-        """ Add a new :class:`Bottle` instance to the stack """
+        """添加新的Bottle实例进栈 """
         if not isinstance(value, Bottle):
             value = Bottle()
         self.append(value)
         return value
 
-    new_app = push
+    new_app = push  # 别名
 
     @property
     def default(self):
         try:
-            return self[-1]
+            return self[-1]  # 尝试返回最右边的APP
         except IndexError:
-            return self.push()
+            return self.push()  # 如果栈/列表为空，就心创建一个返回
 
 
 class WSGIFileWrapper(object):
+    """WSGI 文件（file）的简单封装"""
+
     def __init__(self, fp, buffer_size=1024 * 64):
         self.fp, self.buffer_size = fp, buffer_size
         for attr in ('fileno', 'close', 'read', 'readlines', 'tell', 'seek'):
             if hasattr(fp, attr): setattr(self, attr, getattr(fp, attr))
 
-    def __iter__(self):
+    def __iter__(self):  # 支持迭代
         buff, read = self.buffer_size, self.read
         while True:
             part = read(buff)
@@ -2667,7 +2655,8 @@ class WSGIFileWrapper(object):
 
 
 class _closeiter(object):
-    """ This only exists to be able to attach a .close method to iterators that
+    """ 关闭迭代
+    This only exists to be able to attach a .close method to iterators that
         do not support attribute assignment (most of itertools). """
 
     def __init__(self, iterator, close=None):
@@ -2683,13 +2672,12 @@ class _closeiter(object):
 
 
 class ResourceManager(object):
-    """ This class manages a list of search paths and helps to find and open
-        application-bound resources (files).
+    """资源管理器
+    管理一个搜索路径列表，用于寻找和打开与应用帮顶的资源文件
 
         :param base: default value for :meth:`add_path` calls.
-        :param opener: callable used to open resources.
-        :param cachemode: controls which lookups are cached. One of 'all',
-                         'found' or 'none'.
+        :param opener: 用于打开资源的可调用对象
+        :param cachemode: 控制缓存项，可用选项：'all','found' or 'none'.
     """
 
     def __init__(self, base='./', opener=open, cachemode='all'):
@@ -2697,14 +2685,13 @@ class ResourceManager(object):
         self.base = base
         self.cachemode = cachemode
 
-        #: A list of search paths. See :meth:`add_path` for details.
+        #: 搜索路径列表. See :meth:`add_path` for details.
         self.path = []
-        #: A cache for resolved paths. ``res.cache.clear()`` clears the cache.
+        #: 路径缓存. ``res.cache.clear()`` clears the cache.
         self.cache = {}
 
     def add_path(self, path, base=None, index=None, create=False):
-        """ Add a new path to the list of search paths. Return False if the
-            path does not exist.
+        """ 向路径列表添加一个新的搜索路径，如果该路径不存在则返回False.
 
             :param path: The new search path. Relative paths are turned into
                 an absolute and normalized form. If the path looks like a file
@@ -2747,7 +2734,7 @@ class ResourceManager(object):
                     yield full
 
     def lookup(self, name):
-        """ Search for a resource and return an absolute file path, or `None`.
+        """ 查找资源文件并返回绝对路径, 如果没有则返回 `None`.
 
             The :attr:`path` list is searched in order. The first match is
             returend. Symlinks are followed. The result is cached to speed up
@@ -2764,20 +2751,22 @@ class ResourceManager(object):
         return self.cache[name]
 
     def open(self, name, mode='r', *args, **kwargs):
-        """ Find a resource and return a file object, or raise IOError. """
+        """ 打开资源文件并返回文件对象, 如果文件不存在则抛出IOError. """
         fname = self.lookup(name)
         if not fname: raise IOError("Resource %r not found." % name)
         return self.opener(fname, mode=mode, *args, **kwargs)
 
 
 class FileUpload(object):
+    """文件上传"""
+
     def __init__(self, fileobj, name, filename, headers=None):
-        """ Wrapper for file uploads. """
-        #: Open file(-like) object (BytesIO buffer or temporary file)
+        """ 文件上传的封装 """
+        #: 打开文件（类文件）对象 (BytesIO 缓冲 或 临时文件)
         self.file = fileobj
-        #: Name of the upload form field
+        #: 上传表单字段名称
         self.name = name
-        #: Raw filename as sent by the client (may contain unsafe characters)
+        #: 客户端发送的原始文件名 (可能包含不安全字符)
         self.raw_filename = filename
         #: A :class:`HeaderDict` with additional headers (e.g. content-type)
         self.headers = HeaderDict(headers) if headers else HeaderDict()
@@ -4270,10 +4259,9 @@ class StplParser(object):
 
 def template(*args, **kwargs):
     """
-    Get a rendered template as a string iterator.
-    You can use a name, a filename or a template string as first parameter.
-    Template rendering arguments can be passed as dictionaries
-    or directly (as keyword arguments).
+    获取一个已经渲染的模板作为一个字符串迭代器
+    可以使用名字、文件名或者模板字符串作为第一个参数
+    模板渲染参数可以以字典化形式或者直接以关键字参数形式传递
     """
     tpl = args[0] if args else None
     for dictarg in args[1:]:
@@ -4295,6 +4283,10 @@ def template(*args, **kwargs):
     return TEMPLATES[tplid].render(kwargs)
 
 
+# functools.partial在这里的作用就是的通过预先传递不同的参数，
+# 生成不同的函数，新函数不需要再次传递之前传递的预先传递的参数
+# 在这里template类似一个工厂函数，通过传递不同的模板渲染引擎适配器
+# 生成规格统一/对外接口统一的模板渲染器
 mako_template = functools.partial(template, template_adapter=MakoTemplate)
 cheetah_template = functools.partial(template,
                                      template_adapter=CheetahTemplate)
@@ -4302,8 +4294,9 @@ jinja2_template = functools.partial(template, template_adapter=Jinja2Template)
 
 
 def view(tpl_name, **defaults):
-    """ Decorator: renders a template for a handler.
-        The handler can control its behavior like that:
+    """ 装饰器:为一个handler渲染一个模板.
+    具体渲染功能由template工厂函数生成的渲染器实现
+    handler可以想下面这样控制其行为:
 
           - return a dict of template vars to fill out the template
           - return something other than a dict and the view decorator will not
