@@ -20,14 +20,13 @@ __license__ = 'MIT'
 
 
 ###############################################################################
-# Command-line interface ######################################################
+# 命令行接口 ####################################################################
 ###############################################################################
-# INFO: Some server adapters need to monkey-patch std-lib modules before they
-# are imported. This is why some of the command-line handling is done here, but
-# the actual call to _main() is at the end of the file.
+# 有些服务器适配器在import之前需要monkey-patch标准库，这就是为什么一些命令行处理在这里
+# 但是对_main()的实际调用在本文件的末尾
 
 
-def _cli_parse(args):  # pragma: no coverage
+def _cli_parse(args):  # 命令行解析
     from argparse import ArgumentParser
 
     parser = ArgumentParser(prog=args[0], usage="%(prog)s [options] package.module:app")
@@ -49,7 +48,7 @@ def _cli_parse(args):  # pragma: no coverage
     return cli_args, parser
 
 
-def _cli_patch(cli_args):  # pragma: no coverage
+def _cli_patch(cli_args):  # 命令行patch
     parsed_args, _ = _cli_parse(cli_args)
     opts = parsed_args
     if opts.server:
@@ -65,7 +64,7 @@ if __name__ == '__main__':
     _cli_patch(sys.argv)
 
 ###############################################################################
-# Imports and Python 2/3 unification ##########################################
+# Imports 和 统一Python 2/3  ##########################################
 ###############################################################################
 
 
@@ -83,13 +82,13 @@ try:
 except ImportError:
     from json import dumps as json_dumps, loads as json_lds
 
-# inspect.getargspec was removed in Python 3.6, use
-# Signature-based version where we can (Python 3.3+)
+# inspect.getargspec 在Py3.6中被移除
 try:
-    from inspect import signature
+    from inspect import signature  # for Py3.6+
 
 
     def getargspec(func):
+        """通过signature实现和Py2同等功能的getargspec"""
         params = signature(func).parameters
         args, varargs, keywords, defaults = [], None, None, []
         for name, param in params.items():
@@ -104,7 +103,7 @@ try:
         return (args, varargs, keywords, tuple(defaults) or None)
 except ImportError:
     try:
-        from inspect import getfullargspec
+        from inspect import getfullargspec  # for Py3.3
 
 
         def getargspec(func):
@@ -114,18 +113,20 @@ except ImportError:
     except ImportError:
         from inspect import getargspec
 
-py3k = sys.version_info.major > 2
+py3k = sys.version_info.major > 2  # 是否是Py3+
 
 # Workaround for the "print is a keyword/function" Python 2/3 dilemma
 # and a fallback for mod_wsgi (resticts stdout/err attribute access)
+# 有些功能在Py2中是关键字，在Py3中是函数
 try:
     _stdout, _stderr = sys.stdout.write, sys.stderr.write
 except IOError:
     _stdout = lambda x: sys.stdout.write(x)
     _stderr = lambda x: sys.stderr.write(x)
 
-# Lots of stdlib and builtin differences.
-if py3k:
+# 很多标准库和内建功能的不同
+# 整体是将Py3兼容回Py2
+if py3k:  # 3+
     import http.client as httplib
     import _thread as thread
     from urllib.parse import urljoin, SplitResult as UrlSplitResult
@@ -164,26 +165,29 @@ else:  # 2.x
     exec (compile('def _raise(*a): raise a[0], a[1], a[2]', '<py3fix>', 'exec'))
 
 
-# Some helpers for string/byte handling
+# 字符串和字节(string/byte)处理的一些辅助
 def tob(s, enc='utf8'):
+    """->byte"""
     if isinstance(s, unicode):
         return s.encode(enc)
     return b'' if s is None else bytes(s)
 
 
 def touni(s, enc='utf8', err='strict'):
+    """->unicode"""
     if isinstance(s, bytes):
         return s.decode(enc, err)
     return unicode("" if s is None else s)
 
 
+# 3->unicode,2->byte
 tonat = touni if py3k else tob
 
 
 # 3.2 fixes cgi.FieldStorage to accept bytes (which makes a lot of sense).
 
 
-# A bug in functools causes it to break if the wrapper is an instance method
+# functools中的一个bug导致如果wrapper是个实例方法会中断
 def update_wrapper(wrapper, wrapped, *a, **ka):
     try:
         functools.update_wrapper(wrapper, wrapped, *a, **ka)
@@ -193,9 +197,10 @@ def update_wrapper(wrapper, wrapped, *a, **ka):
 
 # These helpers are used at module level and need to be defined first.
 # And yes, I know PEP-8, but sometimes a lower-case classname makes more sense.
-
+# 老子知道PEP-8
 
 def depr(major, minor, cause, fix):
+    """废弃警告"""
     text = "Warning: Use of deprecated feature or API. (Deprecated in Bottle-%d.%d)\n" \
            "Cause: %s\n" \
            "Fix: %s\n" % (major, minor, cause, fix)
@@ -205,7 +210,7 @@ def depr(major, minor, cause, fix):
     return DeprecationWarning(text)
 
 
-def makelist(data):  # This is just too handy
+def makelist(data):  # 只是图方便
     if isinstance(data, (tuple, list, set, dict)):
         return list(data)
     elif data:
@@ -215,6 +220,7 @@ def makelist(data):  # This is just too handy
 
 
 class DictProperty(object):
+    """数据结构：将key映射到类字典属性"""
     """ Property that maps to a key in a local dict-like attribute. """
 
     def __init__(self, attr, key=None, read_only=False):
@@ -232,15 +238,18 @@ class DictProperty(object):
         return storage[key]
 
     def __set__(self, obj, value):
+        """控制只读不可写"""
         if self.read_only: raise AttributeError("Read-Only property.")
         getattr(obj, self.attr)[self.key] = value
 
     def __delete__(self, obj):
+        """控制只读不可删除，删除是写操作"""
         if self.read_only: raise AttributeError("Read-Only property.")
         del getattr(obj, self.attr)[self.key]
 
 
-class cached_property(object):
+class cached_property(object):  # 这里类名小写，不符合PEP8,是为了符合人类自然语义
+    """缓存属性，每个实例只计算一次，删除即重置"""
     """ A property that is only computed once per instance and then replaces
         itself with an ordinary attribute. Deleting the attribute resets the
         property. """
@@ -255,8 +264,8 @@ class cached_property(object):
         return value
 
 
-class lazy_attribute(object):
-    """ A property that caches itself to the class object. """
+class lazy_attribute(object):  # 同上
+    """ 将自己缓存到类对象的属性 """
 
     def __init__(self, func):
         functools.update_wrapper(self, func, updated=[])
@@ -269,22 +278,22 @@ class lazy_attribute(object):
 
 
 ###############################################################################
-# Exceptions and Events #######################################################
+# 异常和事件 #######################################################
 ###############################################################################
 
 
 class BottleException(Exception):
-    """ A base class for exceptions used by bottle. """
+    """ 异常基类. """
     pass
 
 
 ###############################################################################
-# Routing ######################################################################
+# 路由 ######################################################################
 ###############################################################################
 
 
 class RouteError(BottleException):
-    """ This is a base class for all routing related exceptions """
+    """路由相关的异常基类 """
 
 
 class RouteReset(BottleException):
@@ -297,14 +306,14 @@ class RouterUnknownModeError(RouteError):
 
 
 class RouteSyntaxError(RouteError):
-    """ The route parser found something not supported by this router. """
+    """ 路由语法错误 """
 
 
 class RouteBuildError(RouteError):
-    """ The route could not be built. """
+    """ 路由构建异常 """
 
 
-def _re_flatten(p):
+def _re_flatten(p):  # 就是把有正则中有()提取的换成非提取形式
     """ Turn all capturing groups in a regular expression pattern into
         non-capturing groups. """
     if '(' not in p:
@@ -314,6 +323,12 @@ def _re_flatten(p):
 
 
 class Router(object):
+    """
+    路由器：就是一个有序的route-target名值对集合，
+    用于匹配WSGI请求
+    一个路由包含路径规则和一个HTTP方法
+    路径规则可能是静态的，也可能是形如<ID>动态的
+    """
     """ A Router is an ordered collection of route->target pairs. It is used to
         efficiently match WSGI requests against a number of routes and return
         the first target that satisfies the request. The target may be anything,
@@ -325,23 +340,23 @@ class Router(object):
         and details on the matching order are described in docs:`routing`.
     """
 
-    default_pattern = '[^/]+'
-    default_filter = 're'
+    default_pattern = '[^/]+'  # 缺省模式（排除HTTP sep的所有非空字符）
+    default_filter = 're'  # 缺省过滤器——正则表达式
 
-    #: The current CPython regexp implementation does not allow more
-    #: than 99 matching groups per regular expression.
+    # 当前的CPytrgon正则表达式实现的匹配群组数不能超过99个
     _MAX_GROUPS_PER_PATTERN = 99
 
     def __init__(self, strict=False):
-        self.rules = []  # All rules in order
-        self._groups = {}  # index of regexes to find them in dyna_routes
-        self.builder = {}  # Data structure for the url builder
-        self.static = {}  # Search structure for static routes
-        self.dyna_routes = {}
-        self.dyna_regexes = {}  # Search structure for dynamic routes
+        self.rules = []  # 有序排列的规则
+        self._groups = {}  # 在动态路由中寻找合适的正则表达式索引
+        self.builder = {}  # 用于构建URL的数据结构
+        self.static = {}  # 搜索静态路由的结构
+        self.dyna_routes = {}  # 动态路由
+        self.dyna_regexes = {}  # 搜索动态路由的结构
         #: If true, static routes are no longer checked first.
+        # 如果真，静态路由将不再首先检查
         self.strict_order = strict
-        self.filters = {
+        self.filters = {  # 各种过滤器
             're': lambda conf: (_re_flatten(conf or self.default_pattern),
                                 None, None),
             'int': lambda conf: (r'-?\d+', int, lambda x: str(int(x))),
@@ -350,17 +365,21 @@ class Router(object):
         }
 
     def add_filter(self, name, func):
-        """ Add a filter. The provided function is called with the configuration
-        string as parameter and must return a (regexp, to_python, to_url) tuple.
-        The first element is a string, the last two are callables or None. """
+        """
+        添加过滤器
+        返回(regexp, to_python, to_url)格式的元组
+        第一个是字符串，后两个要么可调用，要么为None
+        """
         self.filters[name] = func
 
+    # 规则语法
     rule_syntax = re.compile('(\\\\*)'
                              '(?:(?::([a-zA-Z_][a-zA-Z_0-9]*)?()(?:#(.*?)#)?)'
                              '|(?:<([a-zA-Z_][a-zA-Z_0-9]*)?(?::([a-zA-Z_]*)'
                              '(?::((?:\\\\.|[^\\\\>]+)+)?)?)?>))')
 
     def _itertokens(self, rule):
+        """解析出规则token"""
         offset, prefix = 0, ''
         for match in self.rule_syntax.finditer(rule):
             prefix += rule[offset:match.start()]
@@ -381,7 +400,7 @@ class Router(object):
             yield prefix + rule[offset:], None, None
 
     def add(self, rule, method, target, name=None):
-        """ Add a new rule or replace the target for an existing rule. """
+        """添加新的路由规则或者替换已经存在的同名规则"""
         anons = 0  # Number of anonymous wildcards found
         keys = []  # Names of keys
         pattern = ''  # Regular expression pattern with named groups
@@ -466,7 +485,7 @@ class Router(object):
             comborules.append((combined, rules))
 
     def build(self, _name, *anons, **query):
-        """ Build an URL by filling the wildcards in a rule. """
+        """ 构建URL"""
         builder = self.builder.get(_name)
         if not builder:
             raise RouteBuildError("No route with that name.", _name)
@@ -479,7 +498,7 @@ class Router(object):
             raise RouteBuildError('Missing URL argument: %r' % E.args[0])
 
     def match(self, environ):
-        """ Return a (target, url_args) tuple or raise HTTPError(400/404/405). """
+        """匹配规则，返回(target,url_args),如果找不到，抛出(400/404/405错误"""
         verb = environ['REQUEST_METHOD'].upper()
         path = environ['PATH_INFO'] or '/'
 
@@ -519,52 +538,56 @@ class Router(object):
 
 
 class Route(object):
-    """ This class wraps a route callback along with route specific metadata and
-        configuration and applies Plugins on demand. It is also responsible for
-        turing an URL path rule into a regular expression usable by the Router.
-    """
+    """ 路由"""
 
     def __init__(self, app, rule, method, callback,
                  name=None,
                  plugins=None,
                  skiplist=None, **config):
-        #: The application this route is installed to.
+        #: 路由将被添加到的应用.
         self.app = app
-        #: The path-rule string (e.g. ``/wiki/<page>``).
+        #: 路径规则字符串.
         self.rule = rule
-        #: The HTTP method as a string (e.g. ``GET``).
+        #: HTTP 方法字符串
         self.method = method
-        #: The original callback with no plugins applied. Useful for introspection.
+        #: 无插件应用时的原始回调
         self.callback = callback
-        #: The name of the route (if specified) or ``None``.
+        #: 路由名称.
         self.name = name or None
-        #: A list of route-specific plugins (see :meth:`Bottle.route`).
+        #: 特定路由插件列表.
         self.plugins = plugins or []
-        #: A list of plugins to not apply to this route (see :meth:`Bottle.route`).
+        #: 不会应用到此路由的插件列表.
         self.skiplist = skiplist or []
         #: Additional keyword arguments passed to the :meth:`Bottle.route`
         #: decorator are stored in this dictionary. Used for route-specific
         #: plugin configuration and meta-data.
+
+        # 给路由田间关键字参数，装饰器存储在这个字典用于路由插件配置和元数据
         self.config = app.config._make_overlay()
         self.config.load_dict(config)
 
     @cached_property
     def call(self):
-        """ The route callback with all plugins applied. This property is
-            created on demand and then cached to speed up subsequent requests."""
+        """
+        所有的插件都会使用这个回调
+        本属性在后台被调用并被缓存起来用于加速
+        :return:
+        """
         return self._make_callback()
 
     def reset(self):
-        """ Forget any cached values. The next time :attr:`call` is accessed,
-            all plugins are re-applied. """
+        """
+        忘记所有的缓存，下一次call被访问的时候，所有的插件都会重新执行
+        :return:
+        """
         self.__dict__.pop('call', None)
 
     def prepare(self):
-        """ Do all on-demand work immediately (useful for debugging)."""
+        """后台执行所有工作，辅助调试"""
         self.call
 
     def all_plugins(self):
-        """ Yield all Plugins affecting this route. """
+        """返回所有对此路由有影响的插件"""
         unique = set()
         for p in reversed(self.app.plugins + self.plugins):
             if True in self.skiplist: break
@@ -575,6 +598,7 @@ class Route(object):
             yield p
 
     def _make_callback(self):
+        """创建回调"""
         callback = self.callback
         for plugin in self.all_plugins():
             try:
@@ -589,32 +613,36 @@ class Route(object):
         return callback
 
     def get_undecorated_callback(self):
-        """ Return the callback. If the callback is a decorated function, try to
-            recover the original function. """
+        """返回回调。如果回调是一个装饰器函数，尝试覆盖原始函数"""
         func = self.callback
         func = getattr(func, '__func__' if py3k else 'im_func', func)
-        closure_attr = '__closure__' if py3k else 'func_closure'
+        closure_attr = '__closure__' if py3k else 'func_closure'  # 闭包属性
         while hasattr(func, closure_attr) and getattr(func, closure_attr):
             attributes = getattr(func, closure_attr)
             func = attributes[0].cell_contents
 
-            # in case of decorators with multiple arguments
+            # 防止装饰器有多个参数
             if not isinstance(func, FunctionType):
-                # pick first FunctionType instance from multiple arguments
+                # 从多个参数中获取第一个FuctionType的实例
                 func = filter(lambda x: isinstance(x, FunctionType),
                               map(lambda x: x.cell_contents, attributes))
                 func = list(func)[0]  # py3 support
         return func
 
     def get_callback_args(self):
+        """获取回调参数
+        运行时动态回去函数/方法对象的参数，关键使用的就是inspect
+        """
         """ Return a list of argument names the callback (most likely) accepts
             as keyword arguments. If the callback is a decorated function, try
             to recover the original function before inspection. """
         return getargspec(self.get_undecorated_callback())[0]
 
     def get_config(self, key, default=None):
-        """ Lookup a config field and return its value, first checking the
-            route.config, then route.app.config."""
+        """查找配置字段并返回它的值
+        优先级-> route.config -> route.app.config
+        ：已经废弃，现在可以直接通过route.config直接访问
+        """
         depr(0, 13, "Route.get_config() is deprectated.",
              "The Route.config property already includes values from the"
              " application config for missing keys. Access it directly.")
@@ -3611,7 +3639,7 @@ server_names = {
 
 
 ###############################################################################
-# Application Control ##########################################################
+# 应用控制 ##########################################################
 ###############################################################################
 
 
@@ -3802,16 +3830,17 @@ class FileCheckerThread(threading.Thread):
 
 
 ###############################################################################
-# Template Adapters ############################################################
+# 模板适配器 ############################################################
 ###############################################################################
 
 
 class TemplateError(BottleException):
+    """模板异常"""
     pass
 
 
 class BaseTemplate(object):
-    """ Base class and minimal API for template adapters """
+    """ 模板适配器基类以及最小API """
     extensions = ['tpl', 'html', 'thtml', 'stpl']
     settings = {}  # used in prepare()
     defaults = {}  # used in render()
@@ -3893,6 +3922,8 @@ class BaseTemplate(object):
 
 
 class MakoTemplate(BaseTemplate):
+    """Mako模板引擎适配"""
+
     def prepare(self, **options):
         from mako.template import Template
         from mako.lookup import TemplateLookup
@@ -3915,6 +3946,8 @@ class MakoTemplate(BaseTemplate):
 
 
 class CheetahTemplate(BaseTemplate):
+    """Cheetah模板引擎适配"""
+
     def prepare(self, **options):
         from Cheetah.Template import Template
         self.context = threading.local()
@@ -3936,6 +3969,8 @@ class CheetahTemplate(BaseTemplate):
 
 
 class Jinja2Template(BaseTemplate):
+    """Jinja2模板引擎适配"""
+
     def prepare(self, filters=None, tests=None, globals={}, **kwargs):
         from jinja2 import Environment, FunctionLoader
         self.env = Environment(loader=FunctionLoader(self.loader), **kwargs)
@@ -3965,6 +4000,8 @@ class Jinja2Template(BaseTemplate):
 
 
 class SimpleTemplate(BaseTemplate):
+    """无额外非标准库依赖模板适配"""
+
     def prepare(self,
                 escape_func=html_escape,
                 noescape=False,
@@ -4041,11 +4078,12 @@ class SimpleTemplate(BaseTemplate):
 
 
 class StplSyntaxError(TemplateError):
+    """简单模板引擎语法错误"""
     pass
 
 
 class StplParser(object):
-    """ Parser for stpl templates. """
+    """ 简单模板引擎Parser（解析） """
     _re_cache = {}  #: Cache for compiled re patterns
 
     # This huge pile of voodoo magic splits python code into 8 different tokens.
