@@ -2092,10 +2092,10 @@ class TemplatePlugin(object):
             return callback
 
 
-#: Not a plugin, but part of the plugin API. TODO: Find a better place.
+#: 不是插件，而是插件API的一部分. TODO: Find a better place.
 class _ImportRedirect(object):
     def __init__(self, name, impmask):
-        """ Create a virtual package that redirects imports (see PEP 302). """
+        """创建一个转向import的虚拟package(PEP302 )"""
         self.name = name
         self.impmask = impmask
         self.module = sys.modules.setdefault(name, imp.new_module(name))
@@ -2125,9 +2125,9 @@ class _ImportRedirect(object):
 
 
 ###############################################################################
-# Common Utilities #############################################################
+# 一般通用工具 #############################################################
 ###############################################################################
-
+# 实现了一些用于处理HTTP的数据结构
 
 class MultiDict(DictMixin):
     """ This dict stores multiple values per key, but behaves exactly like a
