@@ -3227,18 +3227,22 @@ url = make_default_app_wrapper('get_url')
 
 
 ###############################################################################
-# Server Adapter ###############################################################
+# Server 适配器 ###############################################################
 ###############################################################################
 
 # Before you edit or add a server adapter, please read:
 # - https://github.com/bottlepy/bottle/pull/647#issuecomment-60152870
 # - https://github.com/bottlepy/bottle/pull/865#issuecomment-242795341
 
+# 各种Server适配器，基本就是简单的枚举适配
+# 支持wsgi接口的Server理论上都支持Bottle
+
 class ServerAdapter(object):
+    """Server适配器基类"""
     quiet = False
 
     def __init__(self, host='127.0.0.1', port=8080, **options):
-        self.options = options
+        self.options = options  # 任意关键字参数/具名参数
         self.host = host
         self.port = int(port)
 
@@ -3252,6 +3256,7 @@ class ServerAdapter(object):
 
 
 class CGIServer(ServerAdapter):
+    """使用Python自带的wsgiref原始cgi"""
     quiet = True
 
     def run(self, handler):  # pragma: no cover
@@ -3264,14 +3269,8 @@ class CGIServer(ServerAdapter):
         CGIHandler().run(fixed_environ)
 
 
-class FlupFCGIServer(ServerAdapter):
-    def run(self, handler):  # pragma: no cover
-        import flup.server.fcgi
-        self.options.setdefault('bindAddress', (self.host, self.port))
-        flup.server.fcgi.WSGIServer(handler, **self.options).run()
-
-
 class WSGIRefServer(ServerAdapter):
+    """使用CPython自带的wsgiref提供的simple_server"""
     def run(self, app):  # pragma: no cover
         from wsgiref.simple_server import make_server
         from wsgiref.simple_server import WSGIRequestHandler, WSGIServer
@@ -3303,7 +3302,18 @@ class WSGIRefServer(ServerAdapter):
             raise
 
 
+class FlupFCGIServer(ServerAdapter):
+    """使用flup"""
+    def run(self, handler):  # pragma: no cover
+        import flup.server.fcgi
+        self.options.setdefault('bindAddress', (self.host, self.port))
+        flup.server.fcgi.WSGIServer(handler, **self.options).run()
+
+
+
+
 class CherryPyServer(ServerAdapter):
+    """使用Cherrypy"""
     def run(self, handler):  # pragma: no cover
         depr(0, 13, "The wsgi server part of cherrypy was split into a new "
                     "project called 'cheroot'.", "Use the 'cheroot' server "
@@ -3333,6 +3343,7 @@ class CherryPyServer(ServerAdapter):
 
 
 class CherootServer(ServerAdapter):
+    """使用Cheroot"""
     def run(self, handler):  # pragma: no cover
         from cheroot import wsgi
         from cheroot.ssl import builtin
@@ -3352,12 +3363,14 @@ class CherootServer(ServerAdapter):
 
 
 class WaitressServer(ServerAdapter):
+    """使用Waitress"""
     def run(self, handler):
         from waitress import serve
         serve(handler, host=self.host, port=self.port, _quiet=self.quiet, **self.options)
 
 
 class PasteServer(ServerAdapter):
+    """使用Paster"""
     def run(self, handler):  # pragma: no cover
         from paste import httpserver
         from paste.translogger import TransLogger
@@ -3368,6 +3381,7 @@ class PasteServer(ServerAdapter):
 
 
 class MeinheldServer(ServerAdapter):
+    """使用Meinheld"""
     def run(self, handler):
         from meinheld import server
         server.listen((self.host, self.port))
@@ -3400,7 +3414,7 @@ class FapwsServer(ServerAdapter):
 
 
 class TornadoServer(ServerAdapter):
-    """ The super hyped asynchronous server by facebook. Untested. """
+    """ Tornado异步Server"""
 
     def run(self, handler):  # pragma: no cover
         import tornado.wsgi, tornado.httpserver, tornado.ioloop
@@ -3602,6 +3616,7 @@ class AutoServer(ServerAdapter):
                 pass
 
 
+# 当前Bottle支持的Server
 server_names = {
     'cgi': CGIServer,
     'flup': FlupFCGIServer,
