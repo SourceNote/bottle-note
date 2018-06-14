@@ -1,13 +1,7 @@
 # coding:utf-8
 """
-    pluginbase
-    ~~~~~~~~~~
-
-    Pluginbase is a module for Python that provides a system for building
-    plugin based applications.
-
-    :copyright: (c) Copyright 2014 by Armin Ronacher.
-    :license: BSD, see LICENSE for more details.
+    pluginbase：精简灵活的插件系统
+    Tacey：Python实现插件系统绕不开python的import机制
 """
 import os
 import sys
@@ -18,9 +12,9 @@ import hashlib
 import threading
 
 from types import ModuleType
-from weakref import ref as weakref
+from weakref import ref as weakref  # 弱引用，一般用来防止内存泄露
 
-PY2 = sys.version_info[0] == 2
+PY2 = sys.version_info[0] == 2  # 判断Python版本
 if PY2:
     text_type = unicode
     string_types = (unicode, str)
@@ -38,6 +32,7 @@ _internalspace.__path__ = []
 sys.modules[_internalspace.__name__] = _internalspace
 
 
+# 获取插件源码
 def get_plugin_source(module=None, stacklevel=None):
     """Returns the :class:`PluginSource` for the current module or the given
     module.  The module can be provided by name (in which case an import
@@ -71,6 +66,7 @@ def get_plugin_source(module=None, stacklevel=None):
     return _discover_space(name, glob)
 
 
+# 获取搜索路径
 def get_searchpath(path, depth=float('inf'), followlinks=False):
     """This utility function returns a list directories suitable for use as the
     *searchpath* argument to :class:`PluginSource`. This will recursively add
@@ -134,6 +130,7 @@ def _to_bytes(s):
 
 
 class _IntentionallyEmptyModule(ModuleType):
+    """空模块"""
 
     def __getattr__(self, name):
         try:
@@ -441,8 +438,9 @@ try:
     import __builtin__ as builtins
 except ImportError:
     import builtins
+else:
+    print "__builtin__"
 import_hook = _ImportHook(__name__ + '.import_hook', builtins.__import__)
 builtins.__import__ = import_hook.plugin_import
 sys.modules[import_hook.__name__] = import_hook
 del builtins
-

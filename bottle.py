@@ -2092,10 +2092,10 @@ class TemplatePlugin(object):
             return callback
 
 
-#: Not a plugin, but part of the plugin API. TODO: Find a better place.
+#: 不是插件，而是插件API的一部分. TODO: Find a better place.
 class _ImportRedirect(object):
     def __init__(self, name, impmask):
-        """ Create a virtual package that redirects imports (see PEP 302). """
+        """创建一个转向import的虚拟package(PEP302 )"""
         self.name = name
         self.impmask = impmask
         self.module = sys.modules.setdefault(name, imp.new_module(name))
@@ -2125,9 +2125,9 @@ class _ImportRedirect(object):
 
 
 ###############################################################################
-# Common Utilities #############################################################
+# 一般通用工具 #############################################################
 ###############################################################################
-
+# 实现了一些用于处理HTTP的数据结构
 
 class MultiDict(DictMixin):
     """ This dict stores multiple values per key, but behaves exactly like a
@@ -2827,27 +2827,30 @@ class FileUpload(object):
 
 
 ###############################################################################
-# Application Helper ###########################################################
+# 应用辅助 ###########################################################
 ###############################################################################
 
 
 def abort(code=500, text='Unknown Error.'):
-    """ Aborts execution and causes a HTTP error. """
+    """ 中断执行并抛出HTTP错误 """
     raise HTTPError(code, text)
 
 
 def redirect(url, code=None):
-    """ Aborts execution and causes a 303 or 302 redirect, depending on
-        the HTTP protocol version. """
+    """终端执行并造成303或302重定向，取决于HTTP协议版本
+        302 303取决于HTTP版本？？？？
+    """
     if not code:
         code = 303 if request.get('SERVER_PROTOCOL') == "HTTP/1.1" else 302
     res = response.copy(cls=HTTPResponse)
     res.status = code
     res.body = ""
+    # 跳转动作是根据响应头Location实现的
     res.set_header('Location', urljoin(request.url, url))
     raise res
 
 
+# 是为了实现文件迭代，HTTP 的分块获取（也是一般断点续传实现的机制）
 def _file_iter_range(fp, offset, bytes, maxread=1024 * 1024, close=False):
     """ Yield chunks from a range in a file, optionally closing it at the end.
         No chunk is bigger than maxread. """
@@ -2867,6 +2870,16 @@ def static_file(filename, root,
                 download=False,
                 charset='UTF-8',
                 etag=None):
+    """
+    安全的打开一个文件，并返回HTTPResponse
+    :param filename:
+    :param root:
+    :param mimetype:
+    :param download:
+    :param charset:
+    :param etag:
+    :return:
+    """
     """ Open a file in a safe way and return an instance of :exc:`HTTPResponse`
         that can be sent back to the client.
 
@@ -2902,11 +2915,11 @@ def static_file(filename, root,
     filename = os.path.abspath(os.path.join(root, filename.strip('/\\')))
     headers = dict()
 
-    if not filename.startswith(root):
+    if not filename.startswith(root):  # 限定可访问的文件系统路径
         return HTTPError(403, "Access denied.")
     if not os.path.exists(filename) or not os.path.isfile(filename):
         return HTTPError(404, "File does not exist.")
-    if not os.access(filename, os.R_OK):
+    if not os.access(filename, os.R_OK):  # 通过文件系统权限进行的控制
         return HTTPError(403, "You do not have permission to access this file.")
 
     if mimetype is True:
@@ -2916,7 +2929,7 @@ def static_file(filename, root,
             mimetype, encoding = mimetypes.guess_type(filename)
         if encoding: headers['Content-Encoding'] = encoding
 
-    if mimetype:
+    if mimetype:  # 设置文件类型
         if (mimetype[:5] == 'text/' or mimetype == 'application/javascript') \
                 and charset and 'charset' not in mimetype:
             mimetype += '; charset=%s' % charset
@@ -2924,9 +2937,11 @@ def static_file(filename, root,
 
     if download:
         download = os.path.basename(filename if download is True else download)
+        # 告知浏览器是否出现下载保存对话框
+        # 通过下面的文件头实现
         headers['Content-Disposition'] = 'attachment; filename="%s"' % download
 
-    stats = os.stat(filename)
+    stats = os.stat(filename)  # 获取文件信息（大小、创建时间、修改时间等等）
     headers['Content-Length'] = clen = stats.st_size
     headers['Last-Modified'] = email.utils.formatdate(stats.st_mtime,
                                                       usegmt=True)
@@ -2940,6 +2955,8 @@ def static_file(filename, root,
         etag = hashlib.sha1(tob(etag)).hexdigest()
 
     if etag:
+        # etag用于标识文件资源的特定版本
+        # https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
         headers['ETag'] = etag
         check = getenv('HTTP_IF_NONE_MATCH')
         if check and check == etag:
@@ -2968,20 +2985,21 @@ def static_file(filename, root,
 
 
 ###############################################################################
-# HTTP Utilities and MISC (TODO) ###############################################
+# HTTP 工具集 and MISC (TODO) ###############################################
 ###############################################################################
-
+# 这一部分主要是一些细小的零碎工作：解析HTTP头部，字符转义
 
 def debug(mode=True):
-    """ Change the debug level.
-    There is only one debug level supported at the moment."""
+    """ 改变调试级别.
+    ：当前只有一种调试级别:)"""
     global DEBUG
     if mode: warnings.simplefilter('default')
     DEBUG = bool(mode)
 
 
 def http_date(value):
-    if isinstance(value, (datedate, datetime)):
+    """转换成标准HTTP日期格式"""
+    if isinstance(value, (datedate, datetime)):  # 还有这种用法.....isinstance(type,[one-obj,obj-list])
         value = value.utctimetuple()
     elif isinstance(value, (int, float)):
         value = time.gmtime(value)
@@ -2991,6 +3009,7 @@ def http_date(value):
 
 
 def parse_date(ims):
+    """解析RFC1123、RFC850和asc时间戳，转换成UTC标准时间"""
     """ Parse rfc1123, rfc850 and asctime timestamps and return UTC epoch. """
     try:
         ts = email.utils.parsedate_tz(ims)
@@ -3000,7 +3019,9 @@ def parse_date(ims):
 
 
 def parse_auth(header):
-    """ Parse rfc2617 HTTP authentication header string (basic) and return (user,pass) tuple or None"""
+    """解析RFC2617 BASIC鉴权头部字符串，返回（user,pw）或者None
+    主要就是进行base64解码
+    """
     try:
         method, data = header.split(None, 1)
         if method.lower() == 'basic':
@@ -3011,6 +3032,7 @@ def parse_auth(header):
 
 
 def parse_range_header(header, maxlen=0):
+    """HTTP分块请求的文件头解析"""
     """ Yield (start, end) ranges parsed from a HTTP Range header. Skip
         unsatisfiable ranges. The end index is non-inclusive."""
     if not header or header[:6] != 'bytes=': return
@@ -3086,7 +3108,7 @@ def _lscmp(a, b):
 
 
 def cookie_encode(data, key, digestmod=None):
-    """ Encode and sign a pickle-able object. Return a (byte) string """
+    """ 行将废弃：Encode and sign a pickle-able object. Return a (byte) string """
     depr(0, 13, "cookie_encode() will be removed soon.",
          "Do not use this API directly.")
     digestmod = digestmod or hashlib.sha256
@@ -3096,7 +3118,7 @@ def cookie_encode(data, key, digestmod=None):
 
 
 def cookie_decode(data, key, digestmod=None):
-    """ Verify and decode an encoded string. Return an object or None."""
+    """行将废弃： Verify and decode an encoded string. Return an object or None."""
     depr(0, 13, "cookie_decode() will be removed soon.",
          "Do not use this API directly.")
     data = tob(data)
@@ -3110,20 +3132,20 @@ def cookie_decode(data, key, digestmod=None):
 
 
 def cookie_is_encoded(data):
-    """ Return True if the argument looks like a encoded cookie."""
+    """ 行将废弃Return True if the argument looks like a encoded cookie."""
     depr(0, 13, "cookie_is_encoded() will be removed soon.",
          "Do not use this API directly.")
     return bool(data.startswith(tob('!')) and tob('?') in data)
 
 
 def html_escape(string):
-    """ Escape HTML special characters ``&<>`` and quotes ``'"``. """
+    """ HTML特殊字符转义比如 ``&<>`` and quotes ``'"``. """
     return string.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;') \
         .replace('"', '&quot;').replace("'", '&#039;')
 
 
 def html_quote(string):
-    """ Escape and quote a string to be used as an HTTP attribute."""
+    """HTML转义 Escape and quote a string to be used as an HTTP attribute."""
     return '"%s"' % html_escape(string).replace('\n', '&#10;') \
         .replace('\r', '&#13;').replace('\t', '&#9;')
 
@@ -3180,7 +3202,7 @@ def path_shift(script_name, path_info, shift=1):
 
 
 def auth_basic(check, realm="private", text="Access denied"):
-    """ Callback decorator to require HTTP auth (basic).
+    """ 需要HTTP AUTH的回调装饰器 (basic).
         TODO: Add route(check_auth=...) parameter. """
 
     def decorator(func):
@@ -3189,6 +3211,8 @@ def auth_basic(check, realm="private", text="Access denied"):
             user, password = request.auth or (None, None)
             if user is None or not check(user, password):
                 err = HTTPError(401, text)
+                # BASIC AUTH实现的关键（设置AUTH问询头部，next request要设置authcation头部应答）
+                # https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
                 err.add_header('WWW-Authenticate', 'Basic realm="%s"' % realm)
                 return err
             return func(*a, **ka)
@@ -3198,16 +3222,16 @@ def auth_basic(check, realm="private", text="Access denied"):
     return decorator
 
 
-# Shortcuts for common Bottle methods.
-# They all refer to the current default application.
-
+# Bottle一般方法的方便别名（可以直接使用 from bottle import ...的形式导入）
+# 在很多框架中都会通过别名的形式将一些常用的方法提升到packge的最顶层
+# 别名的另外一个常见用途是使接口保持向后兼容
+# 他们全部应用当前默认应用
+# 基本都是使用动态反射实现
 
 def make_default_app_wrapper(name):
-    """ Return a callable that relays calls to the current default app. """
-
     @functools.wraps(getattr(Bottle, name))
     def wrapper(*a, **ka):
-        return getattr(app(), name)(*a, **ka)
+        return getattr(app(), name)(*a, **ka)  # 就是这里
 
     return wrapper
 
