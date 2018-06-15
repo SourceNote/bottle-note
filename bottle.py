@@ -224,9 +224,11 @@ class DictProperty(object):
     """ Property that maps to a key in a local dict-like attribute. """
 
     def __init__(self, attr, key=None, read_only=False):
+        # 作为装饰器参数
         self.attr, self.key, self.read_only = attr, key, read_only
 
     def __call__(self, func):
+        # 作为装饰器wrapper
         functools.update_wrapper(self, func, updated=[])
         self.getter, self.key = func, self.key or func.__name__
         return self
@@ -1111,7 +1113,7 @@ class Bottle(object):
             out.apply(response)
             return self._cast(out.body)
 
-        # File-like objects.
+        # 类文件对象
         if hasattr(out, 'read'):
             if 'wsgi.file_wrapper' in request.environ:
                 return request.environ['wsgi.file_wrapper'](out)
@@ -1150,7 +1152,7 @@ class Bottle(object):
         return new_iter
 
     def wsgi(self, environ, start_response):
-        """ The bottle WSGI-interface. """
+        """ BottleWSGI接口. """
         try:
             out = self._cast(self._handle(environ))
             # rfc2616 section 4.3
@@ -1177,10 +1179,12 @@ class Bottle(object):
             return [tob(err)]
 
     def __call__(self, environ, start_response):
-        """ Each instance of :class:'Bottle' is a WSGI application. """
+        """每一个Bottle实例都是一个WSGI应用"""
         return self.wsgi(environ, start_response)
 
+    # __enter__ 和 __exit__ 实现上下文协议
     def __enter__(self):
+        """使用此应用作为所有模块级别的简便用法"""
         """ Use this application as default for all module-level shortcuts. """
         default_app.push(self)
         return self
@@ -1190,6 +1194,7 @@ class Bottle(object):
 
     def __setattr__(self, name, value):
         if name in self.__dict__:
+            # 给APP添加新的属性时，检查是否已经存在，若存在抛出冲突异常
             raise AttributeError("Attribute %s already defined. Plugin conflict?" % name)
         self.__dict__[name] = value
 
@@ -1197,7 +1202,7 @@ class Bottle(object):
 ###############################################################################
 # HTTP 和 WSGI 工具 ##########################################################
 ###############################################################################
-
+# 这一部分实现HTTP框架很重要的东西：请求和响应
 
 class BaseRequest(object):
     """ A wrapper for WSGI environment dictionaries that adds a lot of
@@ -1651,6 +1656,7 @@ class BaseRequest(object):
 
 def _hkey(key):
     if '\n' in key or '\r' in key or '\0' in key:
+        # 头部名字不能包含控制字符
         raise ValueError("Header names must not contain control characters: %r" % key)
     return key.title().replace('_', '-')
 
@@ -1658,6 +1664,7 @@ def _hkey(key):
 def _hval(value):
     value = tonat(value)
     if '\n' in value or '\r' in value or '\0' in value:
+        # 头部值不能包含控制字符
         raise ValueError("Header value must not contain control characters: %r" % value)
     return value
 
@@ -1908,6 +1915,7 @@ class BaseResponse(object):
             raise TypeError('Secret key required for non-string cookies.')
 
         # Cookie size plus options must not exceed 4kb.
+        # Cookie大小
         if len(name) + len(value) > 3800:
             raise ValueError('Content does not fit into a cookie.')
 
@@ -1945,6 +1953,7 @@ class BaseResponse(object):
 
 
 def _local_property():
+    # 实现本地线程属性（为了线程安全）
     ls = threading.local()
 
     def fget(_):
@@ -3295,6 +3304,7 @@ class CGIServer(ServerAdapter):
 
 class WSGIRefServer(ServerAdapter):
     """使用CPython自带的wsgiref提供的simple_server"""
+
     def run(self, app):  # pragma: no cover
         from wsgiref.simple_server import make_server
         from wsgiref.simple_server import WSGIRequestHandler, WSGIServer
@@ -3328,16 +3338,16 @@ class WSGIRefServer(ServerAdapter):
 
 class FlupFCGIServer(ServerAdapter):
     """使用flup"""
+
     def run(self, handler):  # pragma: no cover
         import flup.server.fcgi
         self.options.setdefault('bindAddress', (self.host, self.port))
         flup.server.fcgi.WSGIServer(handler, **self.options).run()
 
 
-
-
 class CherryPyServer(ServerAdapter):
     """使用Cherrypy"""
+
     def run(self, handler):  # pragma: no cover
         depr(0, 13, "The wsgi server part of cherrypy was split into a new "
                     "project called 'cheroot'.", "Use the 'cheroot' server "
@@ -3368,6 +3378,7 @@ class CherryPyServer(ServerAdapter):
 
 class CherootServer(ServerAdapter):
     """使用Cheroot"""
+
     def run(self, handler):  # pragma: no cover
         from cheroot import wsgi
         from cheroot.ssl import builtin
@@ -3388,6 +3399,7 @@ class CherootServer(ServerAdapter):
 
 class WaitressServer(ServerAdapter):
     """使用Waitress"""
+
     def run(self, handler):
         from waitress import serve
         serve(handler, host=self.host, port=self.port, _quiet=self.quiet, **self.options)
@@ -3395,6 +3407,7 @@ class WaitressServer(ServerAdapter):
 
 class PasteServer(ServerAdapter):
     """使用Paster"""
+
     def run(self, handler):  # pragma: no cover
         from paste import httpserver
         from paste.translogger import TransLogger
@@ -3406,6 +3419,7 @@ class PasteServer(ServerAdapter):
 
 class MeinheldServer(ServerAdapter):
     """使用Meinheld"""
+
     def run(self, handler):
         from meinheld import server
         server.listen((self.host, self.port))
@@ -3672,6 +3686,7 @@ server_names = {
 
 
 def load(target, **namespace):
+    """加载一个模块或者从一个模块获取一个对象"""
     """ Import a module or fetch an object from a module.
 
         * ``package.module`` returns `module` as a module object.
@@ -3692,6 +3707,7 @@ def load(target, **namespace):
 
 
 def load_app(target):
+    """从一个模块中加载一个bottle应用，并确保所加载的对当前缺省应用没有影响"""
     """ Load a bottle application from a module and make sure that the import
         does not affect the current default application, but returns a separate
         application object. See :func:`load` for the target parameter. """
@@ -4112,11 +4128,11 @@ class StplSyntaxError(TemplateError):
 
 class StplParser(object):
     """ 简单模板引擎Parser（解析） """
-    _re_cache = {}  #: Cache for compiled re patterns
-
+    _re_cache = {}  #: 缓存已经编译的正则表达式模式
+    # 需要些编译原理中 token parser的只是
     # This huge pile of voodoo magic splits python code into 8 different tokens.
     # We use the verbose (?x) regex mode to make this more manageable
-
+    # (?x) 正则模式？什么意思？？
     _re_tok = _re_inl = r'''(?mx)(        # verbose and dot-matches-newline mode
         [urbURB]*
         (?:  ''(?!')
@@ -4185,6 +4201,7 @@ class StplParser(object):
             self._re_cache[syntax] = patterns
         self.re_split, self.re_tok, self.re_inl = self._re_cache[syntax]
 
+    # 创建属性（功能同@property一致）
     syntax = property(get_syntax, set_syntax)
 
     def translate(self):
@@ -4367,7 +4384,7 @@ cheetah_view = functools.partial(view, template_adapter=CheetahTemplate)
 jinja2_view = functools.partial(view, template_adapter=Jinja2Template)
 
 ###############################################################################
-# Constants and Globals ########################################################
+# 常量和全局变量 ########################################################
 ###############################################################################
 
 TEMPLATE_PATH = ['./', './views/']
@@ -4386,7 +4403,7 @@ HTTP_CODES[511] = "Network Authentication Required"
 _HTTP_STATUS_LINES = dict((k, '%d %s' % (k, v))
                           for (k, v) in HTTP_CODES.items())
 
-#: The default template used for error pages. Override with @error()
+#: 用于错误页面的缺省模板 Override with @error()
 ERROR_PAGE_TEMPLATE = """
 %%try:
     %%from %s import DEBUG, request
@@ -4430,14 +4447,14 @@ ERROR_PAGE_TEMPLATE = """
 #: A thread-safe instance of :class:`LocalRequest`. If accessed from within a
 #: request callback, this instance always refers to the *current* request
 #: (even on a multi-threaded server).
-request = LocalRequest()
+request = LocalRequest()  # 线程安全
 
 #: A thread-safe instance of :class:`LocalResponse`. It is used to change the
 #: HTTP response for the *current* request.
-response = LocalResponse()
+response = LocalResponse()  # 线程安全
 
 #: A thread-safe namespace. Not used by Bottle.
-local = threading.local()
+local = threading.local()  # 线程安全
 
 # Initialize app stack (create first empty Bottle app now deferred until needed)
 # BC: 0.6.4 and needed for run()
@@ -4445,6 +4462,8 @@ apps = app = default_app = AppStack()
 
 #: A virtual package that redirects import statements.
 #: Example: ``import bottle.ext.sqlite`` actually imports `bottle_sqlite`.
+# ： 实现扩展导入，和之前的Flask形式一样，实现方式就是创建虚拟的包（package）
+# ： 这玩意儿有点坑爹的是一般的IDE不能补全或者不能完全补全
 ext = _ImportRedirect('bottle.ext' if __name__ == '__main__' else
                       __name__ + ".ext", 'bottle_%s').module
 
@@ -4463,7 +4482,7 @@ def _main(argv):  # pragma: no coverage
     if not args.app:
         _cli_error("No application entry point specified.")
 
-    sys.path.insert(0, '.')
+    sys.path.insert(0, '.')  # 将当前目录加入python搜索路径
     sys.modules.setdefault('bottle', sys.modules['__main__'])
 
     host, port = (args.bind or 'localhost'), 8080
@@ -4474,7 +4493,7 @@ def _main(argv):  # pragma: no coverage
     config = ConfigDict()
 
     for cfile in args.conf or []:
-        try:
+        try:  # 根据后缀名判断配置文件的格式
             if cfile.endswith('.json'):
                 with open(cfile, 'rb') as fp:
                     config.load_dict(json_loads(fp.read()))
@@ -4488,11 +4507,12 @@ def _main(argv):  # pragma: no coverage
             _cli_error("Unable to parse config file %r: %s" % (cfile, error))
 
     for cval in args.param or []:
+        # 更新配置
         if '=' in cval:
             config.update((cval.split('=', 1),))
         else:
             config[cval] = True
-
+    # 运行web app
     run(args.app,
         host=host,
         port=int(port),
